@@ -4,3 +4,4 @@ lark-oapi
 google-generativeai
 python-dotenv
 gunicorn
+requests

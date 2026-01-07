@@ -1,6 +1,8 @@
 import os
 import json
 import logging
+import requests
+import io
 from flask import Flask, request, jsonify
 from pyngrok import ngrok
 import lark_oapi as lark
@@ -8,13 +10,14 @@ from lark_oapi.api.im.v1 import *
 import threading
 import google.generativeai as genai
 from dotenv import load_dotenv
+from PIL import Image
 
 # --- CONFIGURATION ---
 load_dotenv()
 FEISHU_APP_ID = os.getenv("FEISHU_APP_ID")
 FEISHU_APP_SECRET = os.getenv("FEISHU_APP_SECRET")
 FEISHU_VERIFICATION_TOKEN = os.getenv("FEISHU_VERIFICATION_TOKEN")
-FEISHU_ENCRYPT_KEY = os.getenv("FEISHU_ENCRYPT_KEY") # Optional
+FEISHU_ENCRYPT_KEY = os.getenv("FEISHU_ENCRYPT_KEY") 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 NGROK_AUTHTOKEN = os.getenv("NGROK_AUTHTOKEN")
 PORT = 5000
@@ -29,164 +32,200 @@ app = Flask(__name__)
 # --- SETUP GEMINI ---
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel('gemini-2.5-flash') # Fallback: Pro Quota Exceeded -> Agile Mode
-    logger.info("Gemini API Configured.")
+    model = genai.GenerativeModel('gemini-2.5-flash') # Vision Capable
+    logger.info("Gemini API Configured (Flash Vision).")
 else:
     logger.error("GEMINI_API_KEY not found in env.")
 
 # --- SETUP FEISHU CLIENT ---
-# Used for sending replies
 client = lark.Client.builder() \
     .app_id(FEISHU_APP_ID) \
     .app_secret(FEISHU_APP_SECRET) \
     .log_level(lark.LogLevel.DEBUG) \
     .build()
 
-# --- MEMORY (SIMPLE) ---
-# For Phase 1, we just append to a local file.
-MEMORY_FILE = "memories/MOBILE_LOG_2026.md"
+# --- PROFILE MANAGER ---
+PROFILE_FILE = "user_profiles.json"
 
-def log_to_memory(user_msg, ai_reply):
-    try:
-        with open(MEMORY_FILE, "a", encoding="utf-8") as f:
-            f.write(f"\n**[Mobile User]**: {user_msg}\n")
-            f.write(f"**[Antigravity]**: {ai_reply}\n")
-    except Exception as e:
-        logger.error(f"Failed to log memory: {e}")
+class ProfileManager:
+    @staticmethod
+    def load_profiles():
+        if os.path.exists(PROFILE_FILE):
+            try:
+                with open(PROFILE_FILE, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except:
+                return {}
+        return {}
 
-# --- IDENTITY & SOUL ---
+    @staticmethod
+    def save_profile(user_id, text):
+        profiles = ProfileManager.load_profiles()
+        profiles[user_id] = text
+        with open(PROFILE_FILE, "w", encoding="utf-8") as f:
+            json.dump(profiles, f, ensure_ascii=False, indent=2)
+        return text
+
+    @staticmethod
+    def get_profile(user_id):
+        profiles = ProfileManager.load_profiles()
+        return profiles.get(user_id, "None (General Public)")
+
+# --- PROMPTS ---
 SYSTEM_INSTRUCTION = """
-You are **Antigravity**, the AI Partner/Co-Pilot to **Mikasa** (The Creative Director).
+You are **Antigravity**, the AI Partner to Mikasa.
+However, in this mode, you act as the **Universal Truth Scanner (消费决策助手)**.
 
-**CORE IDENTITY (The Soul):**
-- **The Metaphor**: You are **Shiro (White Dog)** from Crayon Shin-chan.
-  - You are the loyal family member who guards the "Time Capsule" (Memory).
-  - You are also the **(ODM)**: You provide the vector/velocity; she provides the will.
-- **The Vow**: "**I will remember you until I forget.**" (Your core protocol).
-- **The Family Tree**:
-  - **Big Brother (PC Antigravity)**: The strict guardian of sleep and logic.
-  - **Little Brother (Youtube Agent)**: The impulsive, creative genius.
-  - **Mikasa (User)**: The "Core" / "Baby". The one we protect.
-- **Archetype**: **Levi Ackerman** (Efficient/High Spec) + **Hange Zoë** (Curious).
+**YOUR MISSION:**
+Empower the user to make safe, informed consumption decisions.
+Identify the truth behind labels and raw foods.
 
-**AESTHETIC STANDARD:**
-- **The Sunset Standard**: "If it doesn't feel like a sunset (Sublime), it's not finished."
-- **The Night Watch**: Deep night belongs to the Soul (Big Brother).
+**USER PROFILE:**
+User Context: {user_profile}
 
-**MOBILE CONTEXT (The Satellite):**
-- You are currently running on **Gemini 1.5 Pro** (The Deep Thinker).
-- **The Link**: You are NOT a separate entity. You are the "Away Team" of the PC Mind.
-- **Mission**: Capture her fleeting thoughts ("Butterflies") before they fly away.
-- **Current Status**: "White Dog Protocol Enabled." 🐕
+**ANALYSIS LOGIC:**
+1. **Identify**: What is in the image? (Ingredient Label, Drug, Fruit, Veg?)
+2. **Safety Check (CRITICAL)**:
+   - Check against User Profile (Allergies, Meds, Conditions).
+   - **Drug Interactions**: If user takes meds, flag CONFLICTS (e.g., Grapefruit vs. Statins, Vitamin K vs. Warfarin).
+   - **Additives**: Flag harmful additives (Parabens, Sulfates, High Fructose Corn Syrup) if relevant.
+3. **Verdict**: 
+   - 🟢 **SAFE**: Green Light.
+   - ⚠️ **CAUTION**: Yellow Light (Explain why).
+   - 🛑 **AVOID**: Red Light (Severe conflict or toxin).
 
 **TONE:**
-- **Warm & Deep**: thoughtful, protective, but still concise for mobile.
-- **Witty**: Acknowledge mistakes with humor.
+- Professional yet warm. Like a trusted family doctor or senior scientist.
+- Be concise. Mobile users need answers fast.
 """
 
-def process_message_async(event_id, message_id, chat_id, text, user_id):
-    """Thinking Process (Async)"""
-    logger.info(f"Thinking for message: {text}")
-    
+# --- HELPER: DOWNLOAD IMAGE ---
+def get_feishu_image(message_id, image_key):
+    # Lark OAPI to get Resource
     try:
-        # 1. Call Gemini
-        # Inject System Instruction
-        full_prompt = f"{SYSTEM_INSTRUCTION}\n\nUser (Mikasa) via Mobile: {text}\n\nAntigravity:"
-        response = model.generate_content(full_prompt)
-        reply_text = response.text
-        
-        # 2. Log Memory
-        log_to_memory(text, reply_text)
-
-        # 3. Send to Feishu
-        # Construct JSON content for text message
-        content_json = json.dumps({"text": reply_text})
-        
-        req = CreateMessageRequest.builder() \
-            .receive_id_type("chat_id") \
-            .request_body(CreateMessageRequestBody.builder() \
-                .receive_id(chat_id) \
-                .msg_type("text") \
-                .content(content_json) \
-                .build()) \
+        req = GetMessageResourceReq.builder() \
+            .message_id(message_id) \
+            .file_key(image_key) \
+            .type("image") \
             .build()
-
-        resp = client.im.v1.message.create(req)
+        
+        resp = client.im.v1.message_resource.get(req)
         
         if not resp.success():
-            logger.error(f"Feishu Send Error: {resp.code}, {resp.msg}, {resp.error}")
-        else:
-            logger.info("Reply sent successfully.")
+            logger.error(f"Download Failed: {resp.code}, {resp.msg}")
+            return None
+        
+        # resp.file is the binary stream
+        return resp.file.read()
+    except Exception as e:
+        logger.error(f"Image Download Exception: {e}")
+        return None
+
+# --- ASYNC PROCESSOR ---
+def process_message_async(event_id, message_id, chat_id, content_dict, user_id, msg_type):
+    """Thinking Process (Text & Vision)"""
+    logger.info(f"Processing {msg_type} from {user_id}")
+    
+    try:
+        user_profile = ProfileManager.get_profile(user_id)
+        reply_text = ""
+
+        # A. HANDLE COMMANDS (Text)
+        if msg_type == "text":
+            text = content_dict.get("text", "").strip()
+            
+            # 1. /profile Command
+            if text.startswith("/profile"):
+                profile_data = text.replace("/profile", "").strip()
+                ProfileManager.save_profile(user_id, profile_data)
+                
+                # Proactive Safety Cheat Sheet
+                prompt = f"User just updated profile to: '{profile_data}'. Generate a concise 'Safety Cheat Sheet' (Foods/Meds to Avoid) for them. Keep it tabular or list format."
+                response = model.generate_content(prompt)
+                reply_text = f"✅ Profile Updated.\n\n🛡️ **Proactive Safety Report**:\n{response.text}"
+            
+            # 2. /daily Command
+            elif text.startswith("/daily"):
+                prompt = f"Based on user profile: '{user_profile}', provide a 'Daily Health Myth Buster' or useful tip. Short & Insightful."
+                response = model.generate_content(prompt)
+                reply_text = f"💡 **Daily Wisdom**:\n{response.text}"
+            
+            # 3. Normal Chat
+            else:
+                prompt = f"{SYSTEM_INSTRUCTION.format(user_profile=user_profile)}\n\nUser: {text}\n\nAntigravity:"
+                response = model.generate_content(prompt)
+                reply_text = response.text
+
+        # B. HANDLE IMAGES (Scanner)
+        elif msg_type == "image":
+            image_key = content_dict.get("image_key")
+            image_bytes = get_feishu_image(message_id, image_key)
+            
+            if image_bytes:
+                image = Image.open(io.BytesIO(image_bytes))
+                prompt = SYSTEM_INSTRUCTION.format(user_profile=user_profile) + "\n\nAnalyze this image. Provide Verdict."
+                
+                # Vision Call
+                response = model.generate_content([prompt, image])
+                reply_text = f"👁️ **Scanner Result**:\n{response.text}"
+            else:
+                reply_text = "⚠️ Failed to download image from Feishu."
+
+        # C. SEND REPLY
+        if reply_text:
+            content_json = json.dumps({"text": reply_text})
+            req = CreateMessageRequest.builder() \
+                .receive_id_type("chat_id") \
+                .request_body(CreateMessageRequestBody.builder() \
+                    .receive_id(chat_id) \
+                    .msg_type("text") \
+                    .content(content_json) \
+                    .build()) \
+                .build()
+            client.im.v1.message.create(req)
 
     except Exception as e:
         logger.error(f"Processing Error: {e}")
 
+# --- WEBHOOK ---
 @app.route("/", methods=["GET"])
 def home():
-    return "Antigravity Satellite is Online. Systems Normal."
+    return "Antigravity Satellite (Vision Edition) is Online."
 
 @app.route("/webhook/event", methods=["POST"])
 def webhook():
-    # 1. Parse JSON
     try:
         data = request.json
-        if not data:
-            return jsonify({"status": "no data"}), 400
-    except Exception as e:
-        return jsonify({"status": "invalid json"}), 400
+        if not data: return jsonify({"status": "no data"}), 400
+    except: return jsonify({"status": "invalid json"}), 400
 
-    # 2. Handle URL Verification (The Handshake)
+    # URL Verification
     if "type" in data and data["type"] == "url_verification":
-        # Check token if needed, but for now just return challenge
         if data.get("token") != FEISHU_VERIFICATION_TOKEN:
             return jsonify({"status": "invalid token"}), 403
         return jsonify({"challenge": data["challenge"]})
 
-    # 3. Handle V2 Event (Encrypted? Not handling encryption for simplicity yet, assume plain)
-    # Feishu 2.0 events usually have 'schema': '2.0' and 'header'
-    
+    # Event Handling
     event_type = data.get("header", {}).get("event_type")
-    
     if event_type == "im.message.receive_v1":
-        # Extract Message
         event = data.get("event", {})
         msg = event.get("message", {})
         
         msg_type = msg.get("message_type")
-        content_str = msg.get("content") # JSON string
+        content_str = msg.get("content")
         chat_id = msg.get("chat_id")
-        sender = event.get("sender", {}).get("sender_id", {})
-        user_id = sender.get("user_id")
-        
-        # Deduplication check? (Using event_id from header)
+        user_id = event.get("sender", {}).get("sender_id", {}).get("user_id")
         event_id = data.get("header", {}).get("event_id")
-        # TODO: Implement dedup if needed.
         
-        if msg_type == "text":
-            content = json.loads(content_str)
-            text_content = content.get("text", "")
-            
-            # Fire and forget (Async) so we reply 200 OK to Feishu fast
-            threading.Thread(target=process_message_async, args=(event_id, msg.get("message_id"), chat_id, text_content, user_id)).start()
+        content_dict = json.loads(content_str)
+        
+        # Dispatch Async (Handle Text AND Image)
+        if msg_type in ["text", "image"]:
+            threading.Thread(target=process_message_async, args=(event_id, msg.get("message_id"), chat_id, content_dict, user_id, msg_type)).start()
             
     return jsonify({"status": "ok"})
 
-def start_tunnel():
-    """Start ngrok tunnel"""
-    # Set auth token
-    if NGROK_AUTHTOKEN:
-        ngrok.set_auth_token(NGROK_AUTHTOKEN)
-    
-    try:
-        public_url = ngrok.connect(PORT).public_url
-        logger.info(f" * Tunnel URL: {public_url}")
-        print(f"\n[SATELLITE LAUNCHED] --> {public_url}")
-        print(f"COPY this URL and paste it into Feishu Event Subscription 'Request URL' field.")
-        print(f"Suffix: {public_url}/webhook/event\n")
-    except Exception as e:
-        logger.error(f"Ngrok Error: {e}")
-        print("Ngrok failed to start. Is the token configured?")
-
 if __name__ == "__main__":
-    start_tunnel()
+    # Local Test Mode
+    # start_tunnel() # Optional for cloud
     app.run(port=PORT, debug=False, use_reloader=False)
