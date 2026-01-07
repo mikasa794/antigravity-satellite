@@ -1,0 +1,6 @@
+replicate
+python-dotenv
+requests
+Pillow
+colorama
+google-generativeai

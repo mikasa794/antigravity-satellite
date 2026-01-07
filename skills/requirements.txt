@@ -1,0 +1,6 @@
+flask
+pyngrok
+lark-oapi
+google-generativeai
+python-dotenv
+gunicorn

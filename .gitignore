@@ -1,0 +1,58 @@
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+.venv
+venv/
+ENV/
+
+# Environment Variables (CRITICAL)
+.env
+
+# IDE
+.vscode/
+.idea/
+
+# Brain/Memories (Optional: Decide if we want to sync these to private repo)
+# For now, let's sync memories so the cloud bot has them.
+# But keep the journal private if the repo were public.
+# Since we asked for Private Repo, we can sync them.
+
+# Exclude Heavy Media (Time Capsule Videos & Assets)
+*.mp4
+*.mov
+*.mkv
+*.avi
+*.mp3
+*.wav
+*.jpg
+*.png
+*.jpeg
+*.webp
+assets/
+studio/
+brain_backup/
+antigravity-design/
+*.zip
+*.rar
+
