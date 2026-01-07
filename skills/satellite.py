@@ -104,7 +104,7 @@ def get_feishu_image(message_id, image_key):
     # Lark OAPI to get Resource
     try:
         # Correct path for Request Builder in Lark OAPI
-        req = lark.api.im.v1.model.GetMessageResourceReq.builder() \
+        req = lark.api.im.v1.model.GetMessageResourceRequest.builder() \
             .message_id(message_id) \
             .file_key(image_key) \
             .type("image") \
