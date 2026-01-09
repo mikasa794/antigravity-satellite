@@ -1,0 +1,13 @@
+
+┌─────────────────────────────────────────────────────────┐
+│ A new version of Flutter is available!                  │
+│                                                         │
+│ To update to the latest version, run "flutter upgrade". │
+└─────────────────────────────────────────────────────────┘
+Resolving dependencies...
+Note: path is pinned to version 1.8.3 by flutter_test from the flutter SDK.
+See https://dart.dev/go/sdk-version-pinning for details.
+
+
+Because every version of flutter_test from sdk depends on path 1.8.3 and antigravity_lens depends on path ^1.9.0, flutter_test from sdk is forbidden.
+So, because antigravity_lens depends on flutter_test from sdk, version solving failed.
