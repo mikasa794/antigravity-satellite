@@ -186,8 +186,8 @@ def process_message_async(event_id, message_id, chat_id, content_dict, user_id, 
             text = content_dict.get("text", "").strip()
             
             # 0. /ping Command (Version Check)
-            if text.lower() == "/ping":
-                reply_text = "🛰️ **Pong!**\nSystem: Online\nMode: Intelligent (Scanner + Storyteller)\nVersion: 2026.01.09-Patch-1"
+            if "/ping" in text.lower():
+                reply_text = "🛰️ **Pong!**\nSystem: Online\nMode: Intelligent (Scanner + Storyteller)\nVersion: 2026.01.09-Patch-2 (Hotfix)"
 
             # 1. /profile Command
             elif text.startswith("/profile"):
