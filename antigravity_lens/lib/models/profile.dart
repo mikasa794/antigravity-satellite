@@ -45,7 +45,12 @@ class UserProfile {
         id: 'pet_mimi',
         name: 'Mimi (Cat)',
         isPet: true,
-        allergies: ['Lilies', 'Essential Oils', 'Permethrin', 'Chocolate'], // Cat Toxins
+        allergies: [
+          'Lilies',
+          'Essential Oils',
+          'Permethrin',
+          'Chocolate'
+        ], // Cat Toxins
       ),
     ];
   }

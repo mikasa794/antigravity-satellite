@@ -61,12 +61,14 @@ class _LensScreenState extends State<LensScreen> with TickerProviderStateMixin {
   CameraController? controller;
   bool isScanning = false;
   List<UserProfile> activeProfiles = [];
+  List<UserProfile> allProfiles = [];
 
   @override
   void initState() {
     super.initState();
     _initCamera();
-    activeProfiles = UserProfile.getDefaults(); // Default: Activate All
+    allProfiles = UserProfile.getDefaults();
+    activeProfiles = List.from(allProfiles); // Default: Activate All
   }
 
   Future<void> _initCamera() async {
@@ -200,6 +202,67 @@ class _LensScreenState extends State<LensScreen> with TickerProviderStateMixin {
                 ).animate(onPlay: (c) => c.repeat(reverse: true))),
 
                 const Spacer(),
+
+                // Profile Selector (Family Shield)
+                SizedBox(
+                  height: 60,
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    itemCount: allProfiles.length,
+                    itemBuilder: (context, index) {
+                      final profile = allProfiles[index];
+                      final isActive = activeProfiles.contains(profile);
+                      return GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            if (isActive) {
+                              activeProfiles.remove(profile);
+                            } else {
+                              activeProfiles.add(profile);
+                            }
+                          });
+                        },
+                        child: AnimatedContainer(
+                          duration: 200.ms,
+                          margin: const EdgeInsets.only(right: 12),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: isActive
+                                ? Colors.white
+                                : Colors.white.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(30),
+                            border: Border.all(
+                                color: isActive
+                                    ? Colors.transparent
+                                    : Colors.white30),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                profile.isPet ? Icons.pets : Icons.person,
+                                size: 16,
+                                color: isActive ? Colors.black : Colors.white,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                profile.name.split(' ')[0], // First name only
+                                style: TextStyle(
+                                  color:
+                                      isActive ? Colors.black : Colors.white70,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+
+                const SizedBox(height: 20),
 
                 // Capture Button
                 GestureDetector(
