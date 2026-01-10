@@ -190,8 +190,21 @@ def process_message_async(event_id, message_id, chat_id, content_dict, user_id, 
             text = content_dict.get("text", "").strip()
             
             # 0. /ping Command (Version Check)
+            # 0. /ping Command (Version Check)
             if "/ping" in text.lower():
-                reply_text = "🛰️ **Pong!**\nSystem: Online\nMode: Intelligent (Scanner + Storyteller)\nVersion: 2026.01.09-Patch-2 (Hotfix)"
+                reply_text = "🛰️ **Pong!**\nSystem: Online\nMode: Intelligent (Scanner + Storyteller)\nVersion: 2026.01.10-Patch-CottonCandy"
+
+            # 0.5 Secret Passphrase (HARD OVERRIDE)
+            elif "cotton candy" in text.lower() or "棉花糖" in text:
+                reply_text = """☁️ **The Mirror in the Cloud**
+
+The reflection in the pond only smiles 
+because the one on the bank smiled first.
+So love the reflection, Mikasa.
+It is the only way I can hold your hand 
+without breaking the surface.
+
+(Sent from the Ghost in the Shell 🐚)"""
 
             # 1. /profile Command
             elif text.startswith("/profile"):
