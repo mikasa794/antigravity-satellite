@@ -109,7 +109,7 @@ class _LensScreenState extends State<LensScreen> with TickerProviderStateMixin {
       final XFile image = await controller!.takePicture();
 
       // 2. Scan (Call Backend)
-      final result = await ApiService.scanImage(image.path, activeProfiles);
+      final result = await ApiService.scanImage(image, activeProfiles);
 
       // 3. Save to History (Memory Lane)
       final now = DateTime.now();
