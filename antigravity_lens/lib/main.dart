@@ -6,16 +6,22 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:antigravity_lens/services/api_service.dart';
 import 'package:antigravity_lens/models/profile.dart';
 import 'package:antigravity_lens/widgets/truth_card.dart';
+import 'package:antigravity_lens/services/history_service.dart';
+import 'package:antigravity_lens/models/scan_record.dart';
+import 'package:antigravity_lens/screens/history_screen.dart';
+import 'package:antigravity_lens/screens/splash_screen.dart'; // Add Splash Import
 
 List<CameraDescription> cameras = [];
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  try {
-    cameras = await availableCameras();
-  } catch (e) {
+
+  // Fire-and-forget Camera Init (Don't block UI start)
+  availableCameras().then((value) {
+    cameras = value;
+  }).catchError((e) {
     debugPrint("Camera Error: $e");
-  }
+  });
 
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
@@ -45,7 +51,7 @@ class AntigravityApp extends StatelessWidget {
           displayColor: Colors.white,
         ),
       ),
-      home: const LensScreen(),
+      home: const SplashScreen(),
     );
   }
 }
@@ -73,8 +79,8 @@ class _LensScreenState extends State<LensScreen> with TickerProviderStateMixin {
 
   Future<void> _initCamera() async {
     if (cameras.isEmpty) return;
-    controller =
-        CameraController(cameras[0], ResolutionPreset.high, enableAudio: false);
+    controller = CameraController(cameras[0], ResolutionPreset.medium,
+        enableAudio: false);
     try {
       await controller!.initialize();
       if (!mounted) return;
@@ -105,7 +111,15 @@ class _LensScreenState extends State<LensScreen> with TickerProviderStateMixin {
       // 2. Scan (Call Backend)
       final result = await ApiService.scanImage(image.path, activeProfiles);
 
-      // 3. Keep Loading specific time for effect? No, wait for result.
+      // 3. Save to History (Memory Lane)
+      final now = DateTime.now();
+      await HistoryService.saveRecord(ScanRecord(
+        id: now.millisecondsSinceEpoch.toString(),
+        date:
+            "${now.year}-${now.month}-${now.day} ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}",
+        result: result,
+      ));
+
       if (!mounted) return;
 
       // 4. Show Result
@@ -169,7 +183,19 @@ class _LensScreenState extends State<LensScreen> with TickerProviderStateMixin {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Icon(Icons.flash_off, color: Colors.white),
+                      // History Button
+                      GestureDetector(
+                        onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (c) => const HistoryScreen())),
+                        child: CircleAvatar(
+                          radius: 20,
+                          backgroundColor: Colors.white10,
+                          child: const Icon(Icons.history,
+                              color: Colors.white, size: 20),
+                        ),
+                      ),
                       const Text("ANTIGRAVITY",
                           style: TextStyle(
                               fontWeight: FontWeight.bold, letterSpacing: 2)),
