@@ -295,13 +295,25 @@ def scan_api():
         profiles_str = request.form.get('profiles', '[]')
         profiles = json.loads(profiles_str)
         
+        selected_id = request.form.get('selected_profile_id')
+        
         # C. Construct Prompt (Family Mode)
         context_str = "Active Family Profiles:\n"
+        primary_focus_text = ""
+        
         for p in profiles:
             p_name = p.get('name', 'Unknown')
+            p_id = p.get('id', '')
             p_is_pet = p.get('is_pet', False)
+            
             p_context = f"- {p_name}: {p.get('allergies', [])} / {p.get('medications', [])} / {p.get('conditions', [])}"
-            if p_is_pet: p_context += " [PET MODE ACTIVE: Check for Species-Specific Toxins (e.g. Lilies for Cats, Xylitol/Grapes for Dogs)]"
+            if p_is_pet: p_context += " [PET MODE: Check for specialized toxins (Lilies, Xylitol, etc.)]"
+            
+            # Check if this is the selected profile
+            if selected_id and p_id == selected_id:
+                 primary_focus_text = f"**PRIMARY FOCUS**: The user is currently scanning for: {p_name} ({'PET' if p_is_pet else 'HUMAN'}). Prioritize their safety constraints."
+                 p_context = f"👉 {p_context} (SELECTED)"
+            
             context_str += p_context + "\n"
             
         final_prompt = f"""
@@ -310,10 +322,12 @@ def scan_api():
         **CURRENT SCAN CONTEXT (FAMILY MODE):**
         {context_str}
         
+        {primary_focus_text}
+        
         **TASK:**
         User just scanned a product/food.
-        Analyze the image against ALL the profiles above.
-        If ANY profile is at risk, FLAG IT IMMEDIATELY (Red Light).
+        Analyze the image against ALL the profiles above, but ESPECIALLY the Selected Profile.
+        If ANY profile (especially the selected one) is at risk, FLAG IT IMMEDIATELY (Red Light).
         """
         
         # D. Vision Call

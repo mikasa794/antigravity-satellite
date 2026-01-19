@@ -69,7 +69,7 @@ class _CameraScreenState extends State<CameraScreen> {
 
       // Call Satellite API
       final result =
-          await ApiService.scanImage(image.path, _profiles, _selectedProfile);
+          await ApiService.scanImage(image, _profiles, _selectedProfile);
 
       // Show Result (TruthCard)
       showModalBottomSheet(

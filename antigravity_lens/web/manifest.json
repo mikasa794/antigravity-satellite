@@ -1,11 +1,11 @@
 {
-    "name": "antigravity_lens",
-    "short_name": "antigravity_lens",
+    "name": "Antigravity Lens",
+    "short_name": "Antigravity",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#1A1A1A",
+    "theme_color": "#1A1A1A",
+    "description": "The Lens that sees the truth.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

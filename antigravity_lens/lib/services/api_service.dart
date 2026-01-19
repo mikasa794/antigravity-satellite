@@ -22,8 +22,8 @@ class ApiService {
     return _localDesktopUrl;
   }
 
-  static Future<String> scanImage(
-      XFile imageFile, List<UserProfile> profiles) async {
+  static Future<String> scanImage(XFile imageFile, List<UserProfile> profiles,
+      UserProfile selectedProfile) async {
     final uri = Uri.parse('$baseUrl/api/scan');
 
     try {
@@ -43,7 +43,10 @@ class ApiService {
       final profilesJson = jsonEncode(profiles.map((p) => p.toJson()).toList());
       request.fields['profiles'] = profilesJson;
 
-      // 3. Send
+      // 3. Add Selected Profile ID
+      request.fields['selected_profile_id'] = selectedProfile.id;
+
+      // 4. Send
       final streamedResponse = await request.send();
       final response = await http.Response.fromStream(streamedResponse);
 
