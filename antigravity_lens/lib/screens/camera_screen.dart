@@ -193,8 +193,7 @@ class _CameraScreenState extends State<CameraScreen> {
                   const SizedBox(height: 20),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 40),
-                    child: Text(
-                        "Tap 'Open Lens' to scan food, beauty & daily items.",
+                    child: Text("Tap 'Open Lens' to scan items.",
                         textAlign: TextAlign.center,
                         style: GoogleFonts.outfit(
                             color: _charcoal.withOpacity(0.6), fontSize: 16)),
