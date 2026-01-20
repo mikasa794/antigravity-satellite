@@ -5,6 +5,7 @@ import 'package:camera/camera.dart';
 import 'package:antigravity_lens/screens/camera_screen.dart';
 
 List<CameraDescription> _cameras = [];
+String _cameraError = "";
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -13,9 +14,11 @@ Future<void> main() async {
   try {
     _cameras = await availableCameras();
     if (_cameras.isEmpty) {
+      _cameraError = "List is Empty (No cameras detected)";
       debugPrint("No cameras found.");
     }
   } catch (e) {
+    _cameraError = e.toString();
     debugPrint("Camera Fetch Error: $e");
   }
 
@@ -49,7 +52,15 @@ class AntigravityApp extends StatelessWidget {
       ),
       // Directly to Camera Screen for "Easy to Use" experience
       home: _cameras.isEmpty
-          ? const Scaffold(body: Center(child: Text("No Camera Found")))
+          ? Scaffold(
+              body: Center(
+                  child: Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: Text(
+                  "Camera Error:\n$_cameraError\n\nTips: Check Safari Permissions or use HTTPS.",
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.outfit(fontSize: 16, color: Colors.red)),
+            )))
           : CameraScreen(cameras: _cameras),
     );
   }
