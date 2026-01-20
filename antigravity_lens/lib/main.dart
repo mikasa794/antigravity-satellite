@@ -9,10 +9,12 @@ List<CameraDescription> _cameras = [];
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 1. Initialize Cameras (DISABLED FOR DEBUGGING)
+  // 1. Initialize Cameras (Production Mode)
   try {
-    // _cameras = await availableCameras();
-    debugPrint("Skipping Camera Init for Debugging");
+    _cameras = await availableCameras();
+    if (_cameras.isEmpty) {
+      debugPrint("No cameras found.");
+    }
   } catch (e) {
     debugPrint("Camera Fetch Error: $e");
   }
