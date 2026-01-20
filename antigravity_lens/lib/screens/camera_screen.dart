@@ -9,16 +9,14 @@ import '../services/api_service.dart';
 import '../widgets/truth_card.dart';
 
 class CameraScreen extends StatefulWidget {
-  final List<CameraDescription> cameras;
-
-  const CameraScreen({super.key, required this.cameras});
+  const CameraScreen({super.key});
 
   @override
   State<CameraScreen> createState() => _CameraScreenState();
 }
 
 class _CameraScreenState extends State<CameraScreen> {
-  late CameraController _controller;
+  CameraController? _controller;
   bool _isInit = false;
   bool _isScanning = false;
 
@@ -35,7 +33,7 @@ class _CameraScreenState extends State<CameraScreen> {
   @override
   void initState() {
     super.initState();
-    _initCamera();
+    // Camera is NOT initialized by default.
     _loadProfiles();
   }
 
@@ -44,26 +42,50 @@ class _CameraScreenState extends State<CameraScreen> {
     _selectedProfile = _profiles.first; // Default to Shin-chan (Me)
   }
 
-  void _initCamera() async {
-    _controller = CameraController(widget.cameras[0], ResolutionPreset.max,
-        enableAudio: false);
-    await _controller.initialize();
-    if (!mounted) return;
-    setState(() => _isInit = true);
+  Future<void> _initCamera() async {
+    try {
+      final cameras = await availableCameras();
+      if (cameras.isEmpty) {
+        throw Exception("No cameras found");
+      }
+
+      // 1. Find Back Camera
+      CameraDescription? backCamera;
+      for (var cam in cameras) {
+        if (cam.lensDirection == CameraLensDirection.back) {
+          backCamera = cam;
+          break;
+        }
+      }
+      final targetCamera = backCamera ?? cameras[0];
+
+      // 2. Initialize (Medium Res for Web Stability)
+      _controller = CameraController(targetCamera, ResolutionPreset.medium,
+          enableAudio: false);
+
+      await _controller!.initialize();
+      if (!mounted) return;
+      setState(() => _isInit = true);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text("Error: $e")));
+      }
+    }
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _controller?.dispose();
     super.dispose();
   }
 
   void _takePicture() async {
-    if (_isScanning) return;
+    if (_isScanning || !_isInit || _controller == null) return;
     setState(() => _isScanning = true);
 
     try {
-      final image = await _controller.takePicture();
+      final image = await _controller!.takePicture();
       // Simulate Scan Delay for "AI Thinking" vibe
       await Future.delayed(1500.ms);
 
@@ -72,30 +94,34 @@ class _CameraScreenState extends State<CameraScreen> {
           await ApiService.scanImage(image, _profiles, _selectedProfile);
 
       // Show Result (TruthCard)
-      showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        backgroundColor: Colors.transparent,
-        builder: (context) => DraggableScrollableSheet(
-          initialChildSize: 0.6,
-          minChildSize: 0.4,
-          maxChildSize: 0.9,
-          builder: (_, scroll) => Container(
-            decoration: BoxDecoration(
-              color: _cream,
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(30)),
-            ),
-            child: TruthCard(
-              resultText: result,
-              onClose: () => Navigator.pop(context),
+      if (mounted) {
+        showModalBottomSheet(
+          context: context,
+          isScrollControlled: true,
+          backgroundColor: Colors.transparent,
+          builder: (context) => DraggableScrollableSheet(
+            initialChildSize: 0.6,
+            minChildSize: 0.4,
+            maxChildSize: 0.9,
+            builder: (_, scroll) => Container(
+              decoration: BoxDecoration(
+                color: _cream,
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(30)),
+              ),
+              child: TruthCard(
+                resultText: result,
+                onClose: () => Navigator.pop(context),
+              ),
             ),
           ),
-        ),
-      );
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text("Scan Failed: $e")));
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text("Scan Failed: $e")));
+      }
     } finally {
       if (mounted) setState(() => _isScanning = false);
     }
@@ -141,26 +167,38 @@ class _CameraScreenState extends State<CameraScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (!_isInit)
-      return Container(
-          color: _bgLight,
-          child: Center(child: CircularProgressIndicator(color: _sageGreen)));
-
     return Scaffold(
-      backgroundColor: _bgLight, // Use Light Background
+      backgroundColor: _bgLight,
       body: Stack(
         children: [
-          // 1. Camera Feed (Full Screen)
-          SizedBox.expand(
-            child: FittedBox(
-              fit: BoxFit.cover,
-              child: SizedBox(
-                width: _controller.value.previewSize!.height,
-                height: _controller.value.previewSize!.width,
-                child: CameraPreview(_controller),
+          // 1. Camera Feed / Placeholder
+          if (_isInit && _controller != null)
+            SizedBox.expand(
+              child: FittedBox(
+                fit: BoxFit.cover,
+                child: SizedBox(
+                  width: _controller!.value.previewSize!.height,
+                  height: _controller!.value.previewSize!.width,
+                  child: CameraPreview(_controller!),
+                ),
               ),
-            ),
-          ),
+            )
+          else
+            Center(
+                child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                  Icon(Icons.camera_alt_outlined,
+                      size: 80, color: _sageGreen.withOpacity(0.3)),
+                  const SizedBox(height: 20),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 40),
+                    child: Text("Tap 'Open Lens' to scan.",
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.outfit(
+                            color: _charcoal.withOpacity(0.6), fontSize: 16)),
+                  )
+                ])),
 
           // 2. Top Bar (Morandi Pill - Light Mode)
           SafeArea(
@@ -246,12 +284,7 @@ class _CameraScreenState extends State<CameraScreen> {
                         final profile = _profiles[index];
                         final isSelected = profile == _selectedProfile;
                         final pColor = _getProfileColor(profile);
-
-                        // Asset Mapping Strategy
-                        // Priority: 1. avatarPath (if exists) -> 2. Hardcoded fallback -> 3. Icon
                         String? assetPath = profile.avatarPath;
-
-                        // Fallback logic for legacy or hardcoded matching if path is missing
                         if (assetPath == null) {
                           if (profile.id.contains('shinchan'))
                             assetPath = 'assets/avatars/shinchan_icon.png';
@@ -266,21 +299,16 @@ class _CameraScreenState extends State<CameraScreen> {
                           else if (profile.id.contains('grandpa'))
                             assetPath = 'assets/avatars/grandpa_icon.png';
                         }
-
-                        // Icon Logic (only needed if image fails)
                         IconData fallbackIcon = _getProfileIcon(profile);
-
-                        // Animation Logic
                         Widget animatedAvatar = AnimatedContainer(
                           duration: 300.ms,
                           margin: const EdgeInsets.only(right: 16),
-                          padding: const EdgeInsets.all(3), // Border space
+                          padding: const EdgeInsets.all(3),
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             border: Border.all(
                                 color: isSelected ? pColor : Colors.transparent,
-                                width: 3 // Thicker border
-                                ),
+                                width: 3),
                             boxShadow: isSelected
                                 ? [
                                     BoxShadow(
@@ -291,9 +319,8 @@ class _CameraScreenState extends State<CameraScreen> {
                                 : null,
                           ),
                           child: CircleAvatar(
-                            radius: 28, // Bigger avatars
-                            backgroundColor:
-                                Colors.white, // White bg for transparent PNGs
+                            radius: 28,
+                            backgroundColor: Colors.white,
                             child: ClipOval(
                               child: assetPath != null
                                   ? Image.asset(
@@ -303,33 +330,24 @@ class _CameraScreenState extends State<CameraScreen> {
                                       fit: BoxFit.cover,
                                       errorBuilder:
                                           (context, error, stackTrace) {
-                                        return Icon(
-                                          fallbackIcon,
-                                          color: isSelected
-                                              ? pColor
-                                              : Colors.grey[400],
-                                          size: 28,
-                                        );
+                                        return Icon(fallbackIcon,
+                                            color: isSelected
+                                                ? pColor
+                                                : Colors.grey[400],
+                                            size: 28);
                                       },
                                     )
-                                  : Icon(
-                                      fallbackIcon,
+                                  : Icon(fallbackIcon,
                                       color: isSelected
                                           ? pColor
                                           : Colors.grey[400],
-                                      size: 28,
-                                    ),
+                                      size: 28),
                             ),
                           ),
                         );
-
-                        // Apply Effects
-                        // Float logic: Shiro, Me, or any Pet
                         bool shouldFloat =
                             profile.isPet || profile.id.contains('antigravity');
-
                         if (shouldFloat) {
-                          // Super Shiro & Me: ZERO GRAVITY FLOAT
                           return GestureDetector(
                             onTap: () =>
                                 setState(() => _selectedProfile = profile),
@@ -348,7 +366,6 @@ class _CameraScreenState extends State<CameraScreen> {
                             ),
                           );
                         } else {
-                          // Ordinary Mortgage Payers: BREATHING
                           return GestureDetector(
                             onTap: () =>
                                 setState(() => _selectedProfile = profile),
@@ -371,7 +388,7 @@ class _CameraScreenState extends State<CameraScreen> {
                     ),
                   ),
 
-                  // Selected Name Indicator (Dark Text)
+                  // Selected Name Indicator
                   Padding(
                     padding: const EdgeInsets.only(top: 8, bottom: 30),
                     child: Text(
@@ -389,38 +406,59 @@ class _CameraScreenState extends State<CameraScreen> {
 
                   const SizedBox(height: 10),
 
-                  // Shutter Button (Light Theme)
-                  GestureDetector(
-                    onTap: _takePicture,
-                    child: Container(
-                      width: 80,
-                      height: 80,
-                      decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.white,
-                          border: Border.all(
-                              color: _sageGreen.withOpacity(0.8), width: 5),
-                          boxShadow: [
-                            BoxShadow(
-                                color: Colors.grey.withOpacity(0.2),
-                                blurRadius: 10,
-                                spreadRadius: 2)
-                          ]),
-                      child: _isScanning
-                          ? Padding(
-                              padding: const EdgeInsets.all(20),
-                              child:
-                                  CircularProgressIndicator(color: _sageGreen))
-                          : Center(
-                              child: Container(
-                                  width: 60,
-                                  height: 60,
-                                  decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      color: _sageGreen))),
+                  // Shutter Button OR Start Button
+                  if (_isInit && _controller != null)
+                    GestureDetector(
+                      onTap: _takePicture,
+                      child: Container(
+                        width: 80,
+                        height: 80,
+                        decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.white,
+                            border: Border.all(
+                                color: _sageGreen.withOpacity(0.8), width: 5),
+                            boxShadow: [
+                              BoxShadow(
+                                  color: Colors.grey.withOpacity(0.2),
+                                  blurRadius: 10,
+                                  spreadRadius: 2)
+                            ]),
+                        child: _isScanning
+                            ? Padding(
+                                padding: const EdgeInsets.all(20),
+                                child: CircularProgressIndicator(
+                                    color: _sageGreen))
+                            : Center(
+                                child: Container(
+                                    width: 60,
+                                    height: 60,
+                                    decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: _sageGreen))),
+                      ),
+                    ).animate(target: _isScanning ? 1 : 0).scale(
+                        begin: const Offset(1, 1), end: const Offset(0.9, 0.9))
+                  else
+                    // START BUTTON
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 20),
+                      child: ElevatedButton.icon(
+                          onPressed: _initCamera,
+                          icon:
+                              const Icon(Icons.camera_alt, color: Colors.white),
+                          label: Text("OPEN FOOD LENS",
+                              style: GoogleFonts.outfit(
+                                  fontWeight: FontWeight.bold, fontSize: 16)),
+                          style: ElevatedButton.styleFrom(
+                              backgroundColor: _sageGreen,
+                              foregroundColor: Colors.white,
+                              elevation: 5,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 40, vertical: 20),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(40)))),
                     ),
-                  ).animate(target: _isScanning ? 1 : 0).scale(
-                      begin: const Offset(1, 1), end: const Offset(0.9, 0.9)),
 
                   const SizedBox(height: 30),
                 ],

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-// import 'package:audioplayers/audioplayers.dart'; // Import Audio
+import 'camera_screen.dart'; // Import CameraScreen
 // import 'package:audioplayers/audioplayers.dart'; // Import Audio
 
 class SplashScreen extends StatefulWidget {
@@ -68,14 +68,16 @@ class _SplashScreenState extends State<SplashScreen> {
 
     if (!mounted) return;
     // 3. Go to Home (Camera)
-    // For now, we rely on Main to route. This Splash is standalone.
-    // verification: just pop or do nothing if this is just a demo.
-    // But to be proper:
-    // Navigator.of(context).pushReplacement(... CameraScreen ...);
-    // Since we didn't pass cameras here, let's just leave a TODO or fix main to use Splash.
-
-    // TEMPORARY FIX: Just print "Splash Done" until we wire up global state or provider.
-    debugPrint("Splash Sequence Complete");
+    if (mounted) {
+      Navigator.of(context).pushReplacement(
+        PageRouteBuilder(
+          pageBuilder: (_, __, ___) => const CameraScreen(),
+          transitionsBuilder: (_, a, __, c) =>
+              FadeTransition(opacity: a, child: c),
+          transitionDuration: 1000.ms,
+        ),
+      );
+    }
   }
 
   @override
