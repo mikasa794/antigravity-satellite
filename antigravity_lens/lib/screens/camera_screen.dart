@@ -193,7 +193,8 @@ class _CameraScreenState extends State<CameraScreen> {
                   const SizedBox(height: 20),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 40),
-                    child: Text("Tap 'Open Lens' to scan.",
+                    child: Text(
+                        "Tap 'Open Lens' to scan food, beauty & daily items.",
                         textAlign: TextAlign.center,
                         style: GoogleFonts.outfit(
                             color: _charcoal.withOpacity(0.6), fontSize: 16)),
@@ -447,7 +448,7 @@ class _CameraScreenState extends State<CameraScreen> {
                           onPressed: _initCamera,
                           icon:
                               const Icon(Icons.camera_alt, color: Colors.white),
-                          label: Text("OPEN FOOD LENS",
+                          label: Text("OPEN LENS",
                               style: GoogleFonts.outfit(
                                   fontWeight: FontWeight.bold, fontSize: 16)),
                           style: ElevatedButton.styleFrom(
